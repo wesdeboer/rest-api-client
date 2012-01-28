@@ -1,0 +1,130 @@
+#!/bin/bash
+
+PRETTY=$PRETTY_TOOL
+CREDENTIALS=""
+# TODO: test for correct tool
+PRETTY_TOOL="python -mjson.tool" # try python -msimplejson.tool if you get errors
+
+BOLD="\033[1m"
+NORMAL="\033[0m"
+
+function help() {
+    echo -e "
+    Actions:
+        ${BOLD}exit${NORMAL} - Quit the Interactive REST API shell
+        ${BOLD}help${NORMAL} - This help screen
+        ${BOLD}host${NORMAL} [HOST] - View or set the current host name
+        ${BOLD}login${NORMAL} [USERNAME] - Interactively defines a username and password to pass to the api via http auth
+        ${BOLD}logout${NORMAL} - Destroy username and password info
+        ${BOLD}pretty${NORMAL} [ON|OFF] - Enable or disable the pretty json output. Enabled by default.
+        ${BOLD}quit${NORMAL} - Quit the Interactive REST API shell
+        ${BOLD}!!${NORMAL} - Repeat the last request
+
+    "
+}
+
+function request_action() {
+    read -e -p "$USERNAME@$BASE_URL> " ACTION INPUT DATA
+
+    case "$ACTION" in
+        'exit' | 'quit')
+            exit 0;;
+        'help')
+            help;;
+        'host')
+            host "$INPUT";;
+        'login')
+            login "$INPUT";;
+        'logout')
+            logout;;
+        'pretty')
+            pretty "$INPUT";;
+        'GET' | 'PUT' | 'POST' | 'DELETE')
+            LAST_REQUEST="$ACTION $INPUT $DATA"
+            process_request "$ACTION" "$INPUT" "$DATA";;
+        '!!')
+            ACTION=`echo "$LAST_REQUEST" | awk '{print $1}'`
+            INPUT=`echo "$LAST_REQUEST" | awk '{print $2}'`
+            DATA=`echo "$LAST_REQUEST" | awk '{print $3}'`
+            process_request "$ACTION" "$INPUT" "$DATA";;
+        *)
+            ;;
+    esac
+
+    request_action
+}
+
+function get_password {
+    read -t 10 -s -p "Password: " PASSWORD
+    echo ""
+}
+
+function login() {
+    if [ -z "$1" ]; then
+        read -t 10 -p "Username: " USERNAME
+    else
+        USERNAME="$1"
+    fi
+    get_password
+    CREDENTIALS="-u $USERNAME:$PASSWORD"
+}
+
+function logout() {
+    USERNAME=""
+    PASSWORD=""
+    CREDENTIALS=""
+}
+
+function host() {
+    if [ -z "$1" ]; then
+        echo "host: $BASE_URL";
+    else
+        BASE_URL="$1"
+    fi
+}
+
+function pretty() {
+    if [ -z "$1" ]; then
+        echo "pretty: $PRETTY"
+    else
+        case "$1" in
+            'on')
+                PRETTY="$PRETTY_TOOL";;
+            'off')
+                PRETTY="";;
+            'python')
+                PRETTY="python -mjson.tool";;
+            'python2')
+                PRETTY="python -msimplejson.tool";;
+        esac
+    fi
+}
+
+function process_request() {
+    X="-X $1"
+    URL="$BASE_URL$2"
+    DATA=$3
+
+    if [ "$DATA" ]; then
+        DATA=" -d $DATA"
+    fi
+
+    RESPONSE=`curl $CREDENTIALS $X $URL $DATA -s -o -`
+
+    if [ "$PRETTY" ]; then
+        echo $RESPONSE | $PRETTY
+    else
+        echo $RESPONSE 
+    fi
+}
+
+echo "Welcome to Interactive REST API Shell"
+
+if [ -z "$1" ]; then
+    echo -n "Enter Base URL: "
+    read BASE_URL
+else
+    BASE_URL="$1"
+fi
+
+request_action
